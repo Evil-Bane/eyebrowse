@@ -1,0 +1,48 @@
+# ── Python ──
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# ── Virtualenv / uv ──
+.venv/
+venv/
+
+# ── Secrets / env (keep the example) ──
+.env
+*.env
+!.env.example
+# Never commit private keys / certs
+*.pem
+*.key
+*.pfx
+*.p12
+
+# ── Reference clones (read-only, NOT vendored) ──
+reference/
+
+# ── Runtime data: browser profiles, HAR captures, recordings, traces, extraction ──
+# (Generated artifacts default to data/. Curated demo media for the README lives in
+#  docs/ and is intentionally NOT ignored.)
+profiles/
+user_data/
+data/
+*.har
+
+# ── Caches ──
+.cache/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.dmypy.json
+
+# ── Tool output (Playwright MCP page snapshots, etc.) ──
+.playwright-mcp/
+
+# ── OS / editor ──
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

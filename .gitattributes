@@ -1,0 +1,12 @@
+# Normalize line endings. Text files are stored LF in the repo; checked out
+# per-platform. Windows shell scripts MUST be CRLF on checkout — Windows
+# PowerShell 5.1 fails to parse here-strings (and other constructs) when a
+# .ps1 has LF-only endings.
+* text=auto
+
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Keep shell scripts LF so they run on Linux/macOS.
+*.sh text eol=lf

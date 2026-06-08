@@ -1,0 +1,62 @@
+[project]
+name = "eyebrowse"
+version = "0.2.0"
+description = "EyeBrowse — a stealthy, LLM-drivable browser-control engine (CloakBrowser, stealth Chromium), consumed as a library and over MCP."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = { text = "MIT" }
+authors = [{ name = "Evil-Bane", email = "72240505+Evil-Bane@users.noreply.github.com" }]
+keywords = [
+    "browser-automation", "stealth", "mcp", "model-context-protocol", "cloakbrowser",
+    "playwright", "chromium", "cdp", "chrome-devtools-protocol",
+    "web-scraping", "llm", "anti-detection", "agent",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Internet :: WWW/HTTP :: Browsers",
+    "Topic :: Software Development :: Testing",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    # CloakBrowser — the stealth Chromium engine (Chrome/146). A Playwright drop-in that unlocks
+    # CDP: trusted cursorless clicks, network/initiator inspection, MHTML, PDF, native video.
+    # [geoip] pulls geoip2 + socksio so geoip=True (default) can derive tz/locale from the
+    # proxy/exit IP (auto-downloads the GeoLite2 DB on first use).
+    "cloakbrowser[geoip]>=0.3",
+    # CloakBrowser runs on Playwright's Python bindings; pinned loosely, resolved with it.
+    "playwright>=1.40,<2",
+    # MCP server SDK — FastMCP lives at mcp.server.fastmcp.
+    "mcp>=1.2.0",
+    # Async HTTP for captcha-solver API-mode calls.
+    "httpx>=0.27",
+    "pydantic>=2.6",
+    "pydantic-settings>=2.2",
+    # TOTP generation (browser_totp_generate); pure-Python, no native extensions.
+    "pyotp>=2.9",
+]
+
+[project.optional-dependencies]
+# Extraction stack is heavier and only needed for M5; installed via `uv sync --extra extract`.
+extract = [
+    "crawl4ai>=0.4.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/Evil-Bane/eyebrowse"
+Repository = "https://github.com/Evil-Bane/eyebrowse"
+Issues = "https://github.com/Evil-Bane/eyebrowse/issues"
+
+[project.scripts]
+eyebrowse-mcp = "eyebrowse.mcp.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["eyebrowse"]
