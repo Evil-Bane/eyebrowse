@@ -295,8 +295,10 @@ class Session:
     async def cdp_click(self, ref: str, *, button: str = "left", clicks: int = 1) -> None:
         """Trusted, cursorless click on an aria-ref element via CDP Input.dispatchMouseEvent.
 
-        No visible cursor and NO coordinate guessing — the center is computed from the element's
-        own box. Produces a TRUSTED event (isTrusted=true), unlike DOM .click()/dispatchEvent.
+        No coordinate guessing — the center is computed from the element's own box. Produces a
+        TRUSTED event (isTrusted=true), unlike DOM .click()/dispatchEvent. When the session was
+        launched with humanize=True (the default), CloakBrowser humanizes the dispatched pointer
+        events at the browser level, so the click already carries a realistic cursor trajectory.
         """
         loc = self._ref(ref)
         try:

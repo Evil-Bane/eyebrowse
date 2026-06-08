@@ -162,12 +162,17 @@ claude mcp add eyebrowse uv run eyebrowse-mcp  # register with Claude Code
 * **History navigation** uses the browser's real history natively (`page.go_back` /
   `go_forward` / `reload`) — so back/forward traverse click-driven navigations too, not just
   `navigate()`-driven ones.
-* **Interaction options.** `browser_click` is a Playwright `locator.click()` (trusted,
-  actionability-checked, humanized by CloakBrowser). `browser_cdp_click` is a **trusted,
-  cursorless** CDP `Input.dispatchMouseEvent` (no cursor to contend with, no pixel guessing —
-  the point is computed from the element box; `isTrusted=true`, unlike DOM `.click()`). Coordinate
-  mouse (`page.mouse.*`) also works. Prefer `browser_click`; reach for `browser_cdp_click` when an
-  overlay/animation blocks a normal click.
+* **Interaction options.** Both ref-clicks are trusted (`isTrusted=true`) and accurate (the point
+  is computed from the element's box — no pixel guessing), and **both are humanized by CloakBrowser
+  when `humanize=True`** (the default): CloakBrowser humanizes the dispatched pointer events at the
+  binary level, so even a single CDP `Input.dispatchMouseEvent` is expanded into a realistic cursor
+  trajectory (verified: a plain `cdp_click` makes the page see ~27 `mousemove` events). The real
+  difference is the **actionability wait**: `browser_click` is `locator.click()` — it waits for the
+  element to be visible/stable/enabled/receiving-events, so it's robust but slower; `browser_cdp_click`
+  **skips that wait** and dispatches straight at the box, so it's **faster** (good as a fast default)
+  but can fire a touch early on a mid-animation element. Neither bypasses a *covering* overlay (the
+  topmost element at the point still receives the click) — dismiss the overlay first. Coordinate mouse
+  (`page.mouse.*`) also works but guesses pixels — last resort for canvas/off-DOM.
 * **Viewport** defaults to maximize-to-the-randomized-spoofed-screen (large screenshots, full
   per-session fingerprint entropy, `inner <= screen`). Pin a fixed size via
   `EYEBROWSE_VIEWPORT_WIDTH/HEIGHT` only if you need predictable dimensions.
