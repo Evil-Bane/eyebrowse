@@ -23,6 +23,10 @@ venv/
 # ── Reference clones (read-only, NOT vendored) ──
 reference/
 
+# ── Side-loaded test extensions (bring-your-own; may hold a configured API key) ──
+# The generic-extension feature loads ANY unpacked extension path; we never vendor one.
+extensions/
+
 # ── Runtime data: browser profiles, HAR captures, recordings, traces, extraction ──
 # (Generated artifacts default to data/. Curated demo media for the README lives in
 #  docs/ and is intentionally NOT ignored.)

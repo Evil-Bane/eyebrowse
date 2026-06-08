@@ -16,6 +16,7 @@ def register(mcp) -> None:
         record_video: bool = False,
         har_url_filter: str | None = None,
         storage_state: str | None = None,
+        extensions: "list[str] | None" = None,
         proxy_url: str | None = None,
         proxy_server: str | None = None,
         proxy_username: str | None = None,
@@ -39,6 +40,10 @@ def register(mcp) -> None:
         har_url_filter: glob to scope what the HAR records (e.g. '**/api/**' or
             '**/students/**') so it excludes login/captcha/static noise; default = all.
         storage_state: path to a saved cookies/localStorage JSON to reload.
+        extensions: list of paths to UNPACKED Chromium extension folders to side-load (e.g. a
+            captcha-solver or a custom extension). Forces a persistent + headful session
+            (Chromium only side-loads extensions that way); the profile persists so the
+            extension's own config/login survives.
         Most tools auto-create a default session, so calling this is optional.
         """
         eb = state.get_engine()
@@ -60,6 +65,7 @@ def register(mcp) -> None:
             record_video=record_video,
             har_url_filter=har_url_filter,
             storage_state=storage_state,
+            extensions=extensions,
             proxy=proxy,
             no_proxy=no_proxy,
             **extra,

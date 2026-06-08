@@ -3,8 +3,12 @@
 Owns *only* how a stealthy browser/context is brought up — not what's done with it.
 Constraints encoded here:
 
-* **HAR ⇒ ephemeral.** ``launch_persistent_context_async`` strips ``record_har_*`` in
-  Playwright, so HAR is only valid on an ephemeral ``browser.new_context(...)``.
+* **HAR works on BOTH contexts.** ``record_har_*`` is honored by ``launch_persistent_context_async``
+  too (verified) — earlier notes claiming it's "stripped on persistent" were wrong. The
+  initiator-rich HAR is separate anyway (CDP ``Network.*`` via ``browser_cdp_send``), which is
+  context-independent.
+* **Extensions ⇒ persistent + headful.** Chromium only side-loads extensions via a persistent
+  context launched headful with ``--load-extension`` (see ``launch(extensions=...)``).
 * **Return-type duality.** ``launch_persistent_context_async`` yields a ``BrowserContext``;
   ``launch_async`` yields a ``Browser`` (then we make our own context).
 
@@ -107,21 +111,32 @@ class BrowserEngine:
         record_har_path: str | None = None,
         record_har_url_filter: str | None = None,
         record_video_dir: str | None = None,
+        extensions: "list[str] | None" = None,
         context_options: dict | None = None,
         extra: dict | None = None,
     ) -> LaunchResult:
-        if persistent and record_har_path:
-            raise ValueError(
-                "HAR recording requires an ephemeral context and cannot be combined "
-                "with persistent=True (Playwright strips record_har_* from "
-                "launch_persistent_context). For HAR + a logged-in profile, run an "
-                "upstream mitmproxy instead."
-            )
+        # Loading Chromium extensions REQUIRES a persistent context launched headful with
+        # --load-extension (Chromium constraint; headless extension loading via the chromium
+        # channel is newer/flakier, so we use the stable headful path). HAR + persistent is fine
+        # — verified: launch_persistent_context records HAR normally (the old "Playwright strips
+        # record_har on persistent" claim was wrong). And the initiator-rich HAR is CDP
+        # (browser_cdp_send Network.*), which is context-independent regardless.
+        if extensions:
+            persistent = True
+            if not user_data_dir:
+                import tempfile
+                user_data_dir = tempfile.mkdtemp(prefix="eyebrowse_ext_")
 
         from cloakbrowser import launch_async, launch_persistent_context_async
 
         s = self.settings
         opts = self.build_options(proxy=proxy, extra=extra)
+        if extensions:
+            opts["headless"] = False  # extensions need headful (stable path)
+            ext_paths = ",".join(str(p) for p in extensions)
+            args = list(opts.get("args") or [])
+            args += [f"--disable-extensions-except={ext_paths}", f"--load-extension={ext_paths}"]
+            opts["args"] = args
         viewport = None
         if s.viewport_width and s.viewport_height:
             viewport = {"width": s.viewport_width, "height": s.viewport_height}
@@ -133,6 +148,13 @@ class BrowserEngine:
                     kw["viewport"] = viewport
                 if record_video_dir:
                     kw["record_video_dir"] = record_video_dir
+                if record_har_path:  # HAR works on persistent contexts (verified)
+                    kw.update(
+                        record_har_path=record_har_path,
+                        record_har_mode="full",
+                        record_har_content="embed",
+                    )
+                    kw.setdefault("record_har_url_filter", record_har_url_filter or "**/*")
                 context = await launch_persistent_context_async(user_data_dir, **kw)
                 browser = None
                 pages = list(context.pages) or [await context.new_page()]

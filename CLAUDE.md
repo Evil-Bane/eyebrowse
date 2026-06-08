@@ -82,14 +82,25 @@ claude mcp add eyebrowse uv run eyebrowse-mcp  # register with Claude Code
 * **Launch is serialized** behind a semaphore in `BrowserEngine`. Chromium doesn't need it for
   correctness, but it cheaply serializes the one-time CloakBrowser binary download on first launch
   (and keeps one code path). Interactions after launch are parallel-safe.
-* **HAR ⇒ ephemeral.** `launch_persistent_context` strips `record_har_*`. HAR is only set
-  on `browser.new_context(record_har_*)`, and Playwright only flushes it on context close,
-  so `export_har()` **closes the session**. HAR + a logged-in profile ⇒ upstream mitmproxy.
-  (HAR is the native Playwright/Chromium HAR. For the initiator-rich Chrome DevTools HAR with JS
-  call stacks, use `browser_cdp_send` against the `Network.*` domain.)
-* **Captcha = API-mode only.** No browser extension (it raises bot-score and is a heavy, fragile
-  dependency). Solvers fetch a token over HTTP; `captcha/inject.py` writes it into the response
-  field and overrides the widget's getResponse. Kinds: `turnstile`, `recaptcha_v2`, `recaptcha_v3`,
+* **HAR works on BOTH ephemeral and persistent (verified).** `record_har_*` is honored by
+  `launch_persistent_context_async` too — the earlier "persistent strips `record_har_*`" claim was
+  wrong. Verified: persistent + `record_har`, and persistent + `record_har` + a side-loaded
+  extension, both produce a populated HAR (1 and 6 entries against example.com). This matters
+  because **extensions force a persistent context**, yet a consumer may still want HAR — that combo
+  now works. Playwright only flushes the HAR on context close, so `export_har()` still **closes the
+  session**. (HAR is the native Playwright/Chromium HAR. For the initiator-rich Chrome DevTools HAR
+  with JS call stacks, use `browser_cdp_send` against the `Network.*` domain.)
+* **Extensions ⇒ persistent + headful.** `new_session(extensions=[paths])` side-loads UNPACKED
+  Chromium extensions via `--load-extension` (+ `--disable-extensions-except`). Chromium only loads
+  them in a persistent context launched headful, so `extensions` auto-forces `persistent=True` +
+  `headless=False` and mints a temp profile dir if none is given. The engine just loads what it's
+  handed — *which* extension (and any API key it needs) is the consumer's concern. Verify a load via
+  `context.service_workers` (MV3 background → `chrome-extension://<id>/...`).
+* **Built-in captcha = API-mode only.** EyeBrowse's *own* `solve_captcha` uses no browser extension
+  (an extension raises bot-score and is a heavy, fragile dependency). Solvers fetch a token over
+  HTTP; `captcha/inject.py` writes it into the response field and overrides the widget's getResponse.
+  (Orthogonally, a consumer *can* side-load a solver extension via the generic `extensions=` feature
+  above if they accept that tradeoff — that's a consumer decision, not the engine's built-in path.) Kinds: `turnstile`, `recaptcha_v2`, `recaptcha_v3`,
   `hcaptcha`, `funcaptcha` — all four providers speak the Anti-Captcha
   `createTask`/`getTaskResult` dialect, so adding a kind = (1) a task-type
   string in `base.py` (per-provider override where it differs — CapSolver uses `…ProxyLess`

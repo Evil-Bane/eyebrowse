@@ -40,6 +40,7 @@ class EyeBrowse:
         har_url_filter: str | None = None,
         record_video: bool = False,
         storage_state: str | None = None,
+        extensions: "list[str] | None" = None,
         label: str | None = None,
         **launch_extra,
     ) -> Session:
@@ -48,10 +49,17 @@ class EyeBrowse:
         proxy: a URL string ('http://user:pass@host:port'), a dict, or a ProxyConfig.
             Omit it to run **proxyless** (the default). no_proxy=True forces proxyless
             even when a provider or env proxy is configured.
-        record_har: capture a full network HAR (forces an ephemeral context; export
-            with :meth:`export_har`). storage_state: path to a saved cookies/localStorage
-            JSON to reload (ephemeral sessions only).
+        record_har: capture a full network HAR (export with :meth:`export_har`); works on
+            both ephemeral and persistent sessions. storage_state: path to a saved
+            cookies/localStorage JSON to reload.
+        extensions: list of paths to UNPACKED Chromium extension folders to side-load (e.g. a
+            captcha-solver or your own extension). Forces a persistent + headful session
+            (Chromium requirement). The profile persists so the extension's own config/login
+            survives across sessions.
         """
+        # Extensions can only be side-loaded into a persistent (headful) context.
+        if extensions:
+            persistent = True
         # Proxy precedence: explicit arg > configured provider > env proxy > none.
         proxy_from_provider = False
         if no_proxy:
@@ -97,6 +105,7 @@ class EyeBrowse:
             record_har_path=record_har_path,
             record_har_url_filter=har_url_filter,
             record_video_dir=record_video_dir,
+            extensions=extensions,
             context_options=context_options or None,
             extra=launch_extra or None,
         )

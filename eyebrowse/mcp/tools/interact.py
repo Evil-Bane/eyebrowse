@@ -23,15 +23,22 @@ def register(mcp) -> None:
     @mcp.tool()
     async def browser_type(
         ref: str,
-        text: str,
+        text: str | None = None,
         session_id: str | None = None,
         submit: bool = False,
         clear: bool = True,
+        value: str | None = None,
     ) -> str:
         """Type text into a field by ref (top-frame or iframe ref like 'f1e20').
-        submit=True presses Enter after. Returns a snapshot."""
+        submit=True presses Enter after. Returns a snapshot.
+
+        Pass the string as `text`. `value` is accepted as an alias for `text` (a common slip,
+        since browser_fill_form fields use `value`) so the call doesn't hard-error."""
+        typed = text if text is not None else value
+        if typed is None:
+            return "browser_type error: provide `text` — the string to type into the field."
         s = await state.get_engine().ensure_session(session_id)
-        await s.type(ref, text, submit=submit, clear=clear)
+        await s.type(ref, typed, submit=submit, clear=clear)
         return await s.snapshot()
 
     @mcp.tool()
