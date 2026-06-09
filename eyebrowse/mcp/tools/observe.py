@@ -1,6 +1,8 @@
 """Observation tools: snapshot, screenshot, console, downloads."""
 from __future__ import annotations
 
+import os
+
 from mcp.server.fastmcp import Image
 
 from .. import state
@@ -40,11 +42,23 @@ def register(mcp) -> None:
         session_id: str | None = None,
         full_page: bool = False,
         ref: str | None = None,
-    ) -> Image:
+        output_path: str | None = None,
+    ) -> Image | str:
         """Take a PNG screenshot. By default captures the visible viewport; full_page=True
-        captures the entire scrollable page; ref captures a single element."""
+        captures the entire scrollable page; ref captures a single element.
+
+        output_path: if given, the PNG is WRITTEN TO THAT FILE and the absolute path is returned
+        as text (instead of returning the image bytes). Use this to hand a screenshot to an
+        out-of-band vision/OCR tool without routing the (large) image bytes through the caller —
+        e.g. a text-only LLM driver that delegates 'seeing' to a separate vision model."""
         s = await state.get_engine().ensure_session(session_id)
         data = await s.screenshot(full_page=full_page, ref=ref)
+        if output_path:
+            path = os.path.abspath(output_path)
+            os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+            with open(path, "wb") as fh:
+                fh.write(data)
+            return f"Screenshot saved to: {path} ({len(data)} bytes). Pass this exact path to a vision/analysis tool."
         return Image(data=data, format="png")
 
     @mcp.tool()
