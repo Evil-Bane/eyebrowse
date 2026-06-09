@@ -305,9 +305,25 @@ class Session:
             await loc.scroll_into_view_if_needed(timeout=5000)
         except Exception:
             pass
-        box = await loc.bounding_box()
+        # Resolve the box with a SHORT timeout, not the 10s context default. cdp_click's whole point
+        # is speed (it skips the actionability wait), but bounding_box() with no timeout still
+        # auto-waits the full default on a STALE aria-ref (common after a fast SPA re-render) — a 10s
+        # stall for nothing. Fail fast, then retry ONCE after a brief settle (handles mid-animation),
+        # then surface a clear "re-snapshot" error instead of hanging.
+        box = None
+        for _attempt in range(2):
+            try:
+                box = await loc.bounding_box(timeout=1500)
+            except Exception:
+                box = None
+            if box:
+                break
+            await self.page.wait_for_timeout(150)
+            loc = self._ref(ref)  # re-resolve against the latest snapshot
         if not box:
-            raise ValueError(f"ref {ref!r} has no bounding box (hidden / not laid out)")
+            raise ValueError(
+                f"ref {ref!r} has no bounding box (stale ref, hidden, or not laid out) — re-snapshot and retry"
+            )
         x = box["x"] + box["width"] / 2
         y = box["y"] + box["height"] / 2
         cdp = await self.cdp_session()
