@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+from typing import Any
 
 from mcp.server.fastmcp import Image
 
@@ -43,7 +44,7 @@ def register(mcp) -> None:
         full_page: bool = False,
         ref: str | None = None,
         output_path: str | None = None,
-    ) -> Image | str:
+    ) -> Any:  # Image (bytes) OR str (saved path) — Any so FastMCP skips union output-schema gen
         """Take a PNG screenshot. By default captures the visible viewport; full_page=True
         captures the entire scrollable page; ref captures a single element.
 
