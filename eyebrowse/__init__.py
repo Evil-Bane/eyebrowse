@@ -18,7 +18,7 @@ from .engine import Session
 from .identity import Identity, random_identity
 from .proxy import ProxyConfig, ProxyProvider, StaticProxyProvider
 
-__version__ = "0.3.3"
+__version__ = "0.3.4"
 
 __all__ = [
     "__version__",

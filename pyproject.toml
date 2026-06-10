@@ -1,6 +1,6 @@
 [project]
 name = "eyebrowse"
-version = "0.3.3"
+version = "0.3.4"
 description = "EyeBrowse — a stealthy, LLM-drivable browser-control engine (CloakBrowser, stealth Chromium), consumed as a library and over MCP."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"

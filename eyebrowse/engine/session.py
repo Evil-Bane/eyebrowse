@@ -29,6 +29,21 @@ _MAX_WS_MSGS = 500   # max messages per WebSocket
 # Resource types whose response bodies we auto-capture (small, structured payloads).
 _CAPTURE_BODY_TYPES = frozenset({"xhr", "fetch"})
 
+# Per-attempt actionability timeout for the self-healing verbs (click/type/hover/select). Shorter
+# than the 10s context default so a STALE aria-ref (after an SPA re-render) fails fast and re-resolves
+# instead of hanging the full 10s. One retry → ~8s worst case, then a clear "re-snapshot" error.
+_ACT_TIMEOUT_MS = 4000
+
+
+def _is_stale_or_timeout(msg: str) -> bool:
+    """True if a Playwright error looks like a stale/detached ref or an actionability timeout —
+    the cases a re-resolve-and-retry can recover (vs. a real bug we should surface as-is)."""
+    m = (msg or "").lower()
+    return any(s in m for s in (
+        "not found", "not attached", "detached", "timeout", "no node", "element is not",
+        "stale", "is not visible", "intercepts pointer",
+    ))
+
 
 def _frame_payload(payload) -> str:
     if isinstance(payload, str):
@@ -268,12 +283,33 @@ class Session:
     def _ref(self, ref: str):
         return ref_locator(self.page, ref)
 
-    async def click(self, ref: str, *, button: str = "left", double: bool = False) -> None:
+    async def _act_with_retry(self, ref: str, action, what: str = "act"):
+        """Resolve `ref` and run async ``action(locator)``; on a stale-ref/timeout, re-resolve once
+        and retry, then raise a clear 're-snapshot' error. Self-healing for SPA re-renders (the
+        friction behind the dropdown-commit loop) — gives every verb cdp_click's resilience."""
         loc = self._ref(ref)
-        if double:
-            await loc.dblclick(button=button)
-        else:
-            await loc.click(button=button)
+        try:
+            return await action(loc)
+        except Exception as e:
+            if not _is_stale_or_timeout(str(e)):
+                raise
+        await self.page.wait_for_timeout(150)
+        loc = self._ref(ref)  # re-resolve against the latest snapshot
+        try:
+            return await action(loc)
+        except Exception as e:
+            raise ValueError(
+                f"{what} failed on ref {ref!r} (stale ref after re-render / hidden / not laid out) "
+                f"— re-snapshot and use the fresh ref: {str(e)[:140]}"
+            ) from e
+
+    async def click(self, ref: str, *, button: str = "left", double: bool = False) -> None:
+        async def do(loc):
+            if double:
+                await loc.dblclick(button=button, timeout=_ACT_TIMEOUT_MS)
+            else:
+                await loc.click(button=button, timeout=_ACT_TIMEOUT_MS)
+        await self._act_with_retry(ref, do, "click")
 
     # ── CDP (Chrome DevTools Protocol) ─────────────────────────────────────────
     async def cdp_session(self):
@@ -357,14 +393,22 @@ class Session:
             return None
         return None
 
-    async def type(self, ref: str, text: str, *, submit: bool = False, clear: bool = True) -> None:
-        loc = self._ref(ref)
-        if clear:
-            await loc.fill(text)
-        else:
-            await loc.press_sequentially(text)
-        if submit:
-            await loc.press("Enter")
+    async def type(self, ref: str, text: str, *, submit: bool = False, clear: bool = True,
+                   verify: bool = True) -> "str | None":
+        async def do(loc):
+            if clear:
+                await loc.fill(text, timeout=_ACT_TIMEOUT_MS)
+            else:
+                await loc.press_sequentially(text, timeout=_ACT_TIMEOUT_MS)
+            if submit:
+                await loc.press("Enter")
+        await self._act_with_retry(ref, do, "type")
+        if not verify:
+            return None
+        try:  # READ-BACK so the caller can tell whether the value actually landed (controlled inputs no-op)
+            return await self._ref(ref).input_value(timeout=1500)
+        except Exception:
+            return None
 
     async def keyboard_type(self, text: str, *, delay: float | None = None) -> None:
         """Type text into whatever element currently has focus (no ref needed).
@@ -379,10 +423,138 @@ class Session:
         await self.page.keyboard.type(text, **kwargs)
 
     async def hover(self, ref: str) -> None:
-        await self._ref(ref).hover()
+        await self._act_with_retry(ref, lambda loc: loc.hover(timeout=_ACT_TIMEOUT_MS), "hover")
 
-    async def select_option(self, ref: str, values: str | list[str]) -> None:
-        await self._ref(ref).select_option(values)
+    async def select_option(self, ref: str, values: str | list[str]) -> dict:
+        """Select on a NATIVE <select>. Self-verifying: on a no-match, fall back to label match, then
+        a fuzzy contains over the real option list; on total failure raise an error LISTING the
+        available labels (and pointing to select_combobox for custom widgets). Returns the committed
+        {value, label}."""
+        vals = values if isinstance(values, list) else [values]
+        loc = self._ref(ref)
+        try:
+            await loc.select_option(vals, timeout=_ACT_TIMEOUT_MS)
+        except Exception:
+            try:
+                await loc.select_option(label=str(vals[0]), timeout=_ACT_TIMEOUT_MS)
+            except Exception:
+                opts = await loc.evaluate(
+                    "el => (el.options ? Array.from(el.options).map(o => "
+                    "({value:o.value, label:(o.label||o.textContent||'').trim()})) : [])"
+                )
+                want = str(vals[0]).strip().lower()
+                match = next((o for o in (opts or [])
+                              if want in o.get("label", "").lower() or want == o.get("value", "").lower()), None)
+                if not match:
+                    labels = ", ".join(o.get("label", "") for o in (opts or [])[:40]) \
+                        or "(no <option> elements — this is NOT a native <select>)"
+                    raise ValueError(
+                        f"select_option found no option matching {vals!r} on ref {ref!r}. "
+                        f"If this is a CUSTOM/searchable dropdown use select_combobox. Available: {labels}"
+                    )
+                await loc.select_option(match["value"], timeout=_ACT_TIMEOUT_MS)
+        try:
+            return await loc.evaluate(
+                "el => { const o = el.options && el.options[el.selectedIndex];"
+                " return o ? {value:o.value, label:(o.label||o.textContent||'').trim()}"
+                " : {value: el.value, label: el.value}; }"
+            )
+        except Exception:
+            return {"value": str(vals[0]), "label": str(vals[0])}
+
+    async def _combobox_value(self, ref: str) -> "str | None":
+        """Best-effort read of a custom dropdown's committed display value (input value / textContent /
+        aria-label / the [aria-selected=true] option text)."""
+        try:
+            return await self._ref(ref).evaluate(
+                "el => { const sel = el.querySelector && el.querySelector('[aria-selected=\"true\"]');"
+                " return (el.value || (sel && sel.textContent) || el.textContent ||"
+                " el.getAttribute('aria-label') || '').trim(); }"
+            )
+        except Exception:
+            return None
+
+    async def select_combobox(self, ref: str, value: str, *, submit_key: str = "Enter") -> dict:
+        """Pick `value` from a CUSTOM / searchable dropdown (country-code pickers, comboboxes) where
+        select_option times out. Ladder: open the trigger → type-to-filter (per-key events) →
+        ArrowDown + Enter to commit the highlighted option → VERIFY → fall back to clicking the option
+        by visible text. Keyboard-commit is immune to the stale-ref/re-render churn that breaks
+        click-the-option. Returns {committed, actual}."""
+        value = str(value)
+        try:
+            await self._act_with_retry(ref, lambda loc: loc.click(timeout=_ACT_TIMEOUT_MS), "open combobox")
+        except Exception:
+            pass
+        await self.page.wait_for_timeout(150)
+        try:
+            await self.page.keyboard.type(value, delay=20)  # per-key events drive the site's filter
+        except Exception:
+            pass
+        await self.page.wait_for_timeout(300)
+        try:
+            await self.page.keyboard.press("ArrowDown")
+            await self.page.keyboard.press(submit_key)
+        except Exception:
+            pass
+        await self.page.wait_for_timeout(150)
+        actual = await self._combobox_value(ref)
+        committed = value.lower() in (actual or "").lower()
+        if not committed:  # fallback: click the visible option by text
+            try:
+                await self.page.get_by_role("option", name=value).first.click(timeout=2500)
+                await self.page.wait_for_timeout(150)
+                actual = await self._combobox_value(ref)
+                committed = value.lower() in (actual or "").lower()
+            except Exception:
+                pass
+        return {"committed": committed, "actual": actual}
+
+    async def set_input(self, ref: str, value: str) -> "str | None":
+        """Set a value on a FRAMEWORK-CONTROLLED input (React/Vue) via the native value setter +
+        input/change events — the reliable path when fill()/keystrokes silently no-op because the
+        component re-derives value from state. Returns the resulting value."""
+        js = (
+            "(el, v) => { const proto = el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype :"
+            " HTMLInputElement.prototype; const d = Object.getOwnPropertyDescriptor(proto, 'value');"
+            " if (d && d.set) { el.focus(); d.set.call(el, v);"
+            " el.dispatchEvent(new Event('input', {bubbles:true}));"
+            " el.dispatchEvent(new Event('change', {bubbles:true})); } else { el.textContent = v; }"
+            " return el.value !== undefined ? el.value : el.textContent; }"
+        )
+        try:
+            return await self._ref(ref).evaluate(js, str(value))
+        except Exception as e:
+            raise ValueError(f"set_input failed on ref {ref!r}: {str(e)[:140]}") from e
+
+    async def type_otp(self, ref: str, code: str) -> dict:
+        """Enter an OTP `code` robustly. If the ref's field is one of a GROUP of single-char
+        auto-advance boxes, distribute the digits across them (React-tracked setter + input events);
+        otherwise set the whole code into the single field. Returns {boxes, value}."""
+        code = str(code)
+        js = (
+            "(el, code) => {"
+            " const setVal = (input, v) => { const proto = input.tagName === 'TEXTAREA' ?"
+            " HTMLTextAreaElement.prototype : HTMLInputElement.prototype;"
+            " const s = Object.getOwnPropertyDescriptor(proto, 'value').set; input.focus(); s.call(input, v);"
+            " input.dispatchEvent(new Event('input', {bubbles:true}));"
+            " input.dispatchEvent(new Event('change', {bubbles:true})); };"
+            " const scope = el.closest('form') || el.parentElement || document;"
+            " let boxes = Array.from(scope.querySelectorAll('input')).filter(i => i.maxLength === 1 &&"
+            " ['text','tel','number','password',''].includes(i.type));"
+            " if (boxes.length >= code.length) { boxes = boxes.slice(0, code.length);"
+            " boxes.forEach((b, i) => setVal(b, code[i]));"
+            " return {boxes: boxes.length, value: boxes.map(b => b.value).join('')}; }"
+            " setVal(el, code); return {boxes: 1, value: el.value}; }"
+        )
+        try:
+            return await self._ref(ref).evaluate(js, code)
+        except Exception:
+            try:
+                await self._ref(ref).click(timeout=_ACT_TIMEOUT_MS)
+            except Exception:
+                pass
+            await self.page.keyboard.type(code)
+            return {"boxes": "?", "value": "(typed via keyboard fallback — verify separately)"}
 
     async def press_key(self, key: str) -> None:
         await self.page.keyboard.press(key)

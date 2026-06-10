@@ -38,8 +38,13 @@ def register(mcp) -> None:
         if typed is None:
             return "browser_type error: provide `text` — the string to type into the field."
         s = await state.get_engine().ensure_session(session_id)
-        await s.type(ref, typed, submit=submit, clear=clear)
-        return await s.snapshot()
+        val = await s.type(ref, typed, submit=submit, clear=clear)
+        snap = await s.snapshot()
+        # Surface the READ-BACK so you can tell whether the value actually landed (controlled inputs
+        # silently no-op). If it shows empty/wrong, re-type or use browser_set_input.
+        if val is not None and val != typed:
+            return f"typed, but field VALUE now reads {val!r} (expected {typed!r}) — re-check / use browser_set_input.\n\n{snap}"
+        return snap
 
     @mcp.tool()
     async def browser_keyboard_type(
@@ -79,10 +84,51 @@ def register(mcp) -> None:
         values: list[str],
         session_id: str | None = None,
     ) -> str:
-        """Select option(s) in a <select> by ref. Returns a snapshot."""
+        """Select option(s) in a NATIVE <select> by ref (match by value OR visible label). Self-
+        verifies and, on a no-match, returns the available option labels. For a CUSTOM / searchable
+        dropdown (styled div, role=combobox/listbox — most country-code pickers) this will not work —
+        use browser_select_combobox instead. Returns the committed option + a snapshot."""
         s = await state.get_engine().ensure_session(session_id)
-        await s.select_option(ref, values)
-        return await s.snapshot()
+        committed = await s.select_option(ref, values)
+        return f"selected -> {committed}\n\n{await s.snapshot()}"
+
+    @mcp.tool()
+    async def browser_select_combobox(
+        ref: str,
+        value: str,
+        session_id: str | None = None,
+        submit_key: str = "Enter",
+    ) -> str:
+        """Pick `value` from a CUSTOM / searchable dropdown or combobox (country & country-code
+        pickers, styled listboxes) where browser_select_option times out. Opens the trigger `ref`,
+        types `value` to filter, commits the highlighted option by keyboard (ArrowDown+Enter), then
+        VERIFIES the committed value and falls back to clicking the option by visible text. Filter by
+        the COUNTRY NAME (e.g. 'Germany'), not a dial code ('49') which matches the wrong row. Returns
+        {committed, actual} + a snapshot — if committed=false the selection did NOT take."""
+        s = await state.get_engine().ensure_session(session_id)
+        res = await s.select_combobox(ref, value, submit_key=submit_key)
+        return f"combobox -> {res}\n\n{await s.snapshot()}"
+
+    @mcp.tool()
+    async def browser_set_input(ref: str, value: str, session_id: str | None = None) -> str:
+        """Set `value` on a FRAMEWORK-CONTROLLED input (React/Vue) via the native value setter +
+        input/change events. Use this when browser_type / fill silently leaves the field EMPTY
+        (controlled components re-derive value from state and ignore plain typing — e.g. some OTP and
+        masked phone inputs). Returns the resulting value + a snapshot."""
+        s = await state.get_engine().ensure_session(session_id)
+        val = await s.set_input(ref, value)
+        return f"set value -> {val!r}\n\n{await s.snapshot()}"
+
+    @mcp.tool()
+    async def browser_type_otp(ref: str, code: str, session_id: str | None = None) -> str:
+        """Enter an OTP/verification `code` into the field at `ref`, handling MULTI-BOX widgets (one
+        <input maxlength=1> per digit that auto-advances) by distributing the digits across the boxes
+        via the React-tracked setter — instead of typing the whole code into box 1 (which lands the
+        digits in the wrong boxes). Works on a single field too. Returns {boxes, value} (read it back)
+        + a snapshot. After this, still SUBMIT (Enter / a Verify button)."""
+        s = await state.get_engine().ensure_session(session_id)
+        res = await s.type_otp(ref, code)
+        return f"otp entered -> {res}\n\n{await s.snapshot()}"
 
     @mcp.tool()
     async def browser_press_key(key: str, session_id: str | None = None) -> str:
