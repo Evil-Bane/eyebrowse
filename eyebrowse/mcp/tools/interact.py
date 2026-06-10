@@ -170,6 +170,8 @@ def register(mcp) -> None:
         selector: str | None = None,
         url: str | None = None,
         network_idle: bool = False,
+        value_ref: str | None = None,
+        value: str | None = None,
         time: float | None = None,
         timeout_ms: float | None = None,
     ) -> str:
@@ -180,13 +182,15 @@ def register(mcp) -> None:
         selector    — CSS/Playwright selector to become visible.
         url         — URL glob/regex to wait for (SPA client-side navigation).
         network_idle — wait until no network requests for 500ms (SPA render complete).
+        value_ref + value — wait until the element at value_ref HOLDS `value` (substring). Confirms a
+            field/dropdown actually committed (e.g. value_ref=<country picker>, value='Germany').
         time        — wait N seconds unconditionally.
         timeout_ms  — max wait in ms (default 30 000).
         """
         s = await state.get_engine().ensure_session(session_id)
         await s.wait_for(
             text=text, text_gone=text_gone, selector=selector,
-            url=url, network_idle=network_idle,
+            url=url, network_idle=network_idle, value_ref=value_ref, value=value,
             time=time, timeout_ms=timeout_ms,
         )
         return await s.snapshot()

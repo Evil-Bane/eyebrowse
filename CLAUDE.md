@@ -36,7 +36,7 @@ eyebrowse/
   mcp/
     server.py       FastMCP entrypoint (lifespan holds one EyeBrowse), main()
     state.py        process-wide engine handle
-    tools/          17 tool-group modules (1:1 over the façade) = 84 tools
+    tools/          17 tool-group modules (1:1 over the façade) = 85 tools
 examples/direct_usage.py   library usage proof (no MCP)
 docs/TOOLS.md              full per-tool reference
 ```
@@ -120,11 +120,11 @@ claude mcp add eyebrowse uv run eyebrowse-mcp  # register with Claude Code
   default to None → derived from the proxy exit IP via geoip.
 * **Windows:** runs headful/headless natively (no Xvfb).
 
-## MCP tool surface — 84 tools (grouped in `mcp/tools/`)
+## MCP tool surface — 85 tools (grouped in `mcp/tools/`)
 
 - **sessions**: `browser_new_session` / `browser_close_session` / `browser_list_sessions` / `browser_video_path`
 - **navigate**: `browser_navigate` / `browser_navigate_back` / `browser_navigate_forward` / `browser_reload` / `browser_tabs` / `browser_switch_to_popup`
-- **observe**: `browser_snapshot` / `browser_snapshot_frame` / `browser_screenshot` / `browser_resize` / `browser_console_messages` / `browser_wait_for_download`
+- **observe**: `browser_snapshot` / `browser_snapshot_frame` / `browser_find` / `browser_screenshot` / `browser_resize` / `browser_console_messages` / `browser_wait_for_download`
 - **interact**: `browser_click` / `browser_type` / `browser_keyboard_type` / `browser_fill_form` / `browser_hover` / `browser_select_option` / `browser_select_combobox` / `browser_set_input` / `browser_type_otp` / `browser_press_key` / `browser_drag` / `browser_file_upload` / `browser_handle_dialog` / `browser_wait_for` / `browser_evaluate` / `browser_scroll` / `browser_scroll_to_bottom`
 - **mouse (coordinate)**: `browser_mouse_move` / `browser_mouse_click` / `browser_mouse_down` / `browser_mouse_up` / `browser_mouse_wheel` / `browser_mouse_drag`
 - **network**: `browser_network_requests` / `browser_network_request` / `browser_ws_messages`

@@ -11,16 +11,34 @@ from .. import state
 
 def register(mcp) -> None:
     @mcp.tool()
-    async def browser_snapshot(session_id: str | None = None, depth: int | None = None) -> str:
+    async def browser_snapshot(session_id: str | None = None, depth: int | None = None,
+                               enrich: bool = False) -> str:
         """Capture the page's ARIA accessibility tree with [ref=...] handles.
 
         This is the primary way to 'see' a page: it lists actionable elements (roles +
         names + refs) without CSS/markup noise. Pass a ref from here to click/type/hover.
         Frame-hosted elements get prefixed refs like 'f1e36' (iframe 1, element 36).
         Shadow DOM elements appear with plain eN refs — the locator engine pierces them.
+
+        enrich=True ALSO appends a DOM map of visible interactive elements, each with a css
+        selector usable in the ref slot (browser_click(ref="css=...")). Use it when the ARIA
+        tree collapses to bare 'generic' nodes with no usable names/refs (JS-heavy sites).
         """
         s = await state.get_engine().ensure_session(session_id)
-        return await s.snapshot(depth=depth)
+        return await s.snapshot(depth=depth, enrich=enrich)
+
+    @mcp.tool()
+    async def browser_find(query: str, session_id: str | None = None) -> Any:
+        """Find VISIBLE interactive elements whose text / placeholder / label / type contains
+        `query` — the escape hatch when browser_snapshot is all 'generic' (no usable [ref=eN]).
+        Returns a list of matches, each with a css selector you act on via the ref slot, e.g.
+        browser_click(ref="css=...") or browser_type(ref="css=...", text=...).
+        Example: browser_find("verification code") -> the OTP input + its css ref."""
+        s = await state.get_engine().ensure_session(session_id)
+        items = await s.find(query)
+        if not items:
+            return f"no visible interactive element matched {query!r} — try browser_snapshot(enrich=True)."
+        return items
 
     @mcp.tool()
     async def browser_snapshot_frame(

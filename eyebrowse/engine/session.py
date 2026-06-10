@@ -45,6 +45,56 @@ def _is_stale_or_timeout(msg: str) -> bool:
     ))
 
 
+# One-shot DOM map of VISIBLE interactive elements + a usable css selector for each — the safe
+# "enrich the ARIA snapshot" / "find element" primitive for pages where aria_snapshot collapses to
+# bare 'generic' nodes. Takes an optional lowercase text filter; returns up to 60 descriptors. ONE
+# page.evaluate (no per-ref round-trips), so it's cheap enough to run on demand.
+_DOM_MAP_JS = """
+(filter) => {
+  const SEL = 'input,button,select,textarea,a[href],[role=button],[role=link],[role=checkbox],[role=radio],[role=combobox],[role=option],[role=tab],[role=menuitem],[role=switch],[contenteditable=true]';
+  const visible = (e) => { const r = e.getBoundingClientRect(); const s = getComputedStyle(e); return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none'; };
+  const cssPath = (el) => {
+    if (el.id) return '#' + CSS.escape(el.id);
+    const nm = el.getAttribute('name');
+    if (nm) return el.tagName.toLowerCase() + '[name=' + JSON.stringify(nm) + ']';
+    const parts = []; let e = el;
+    while (e && e.nodeType === 1 && parts.length < 4) {
+      let p = e.tagName.toLowerCase();
+      const par = e.parentElement;
+      if (par) { const sibs = Array.from(par.children).filter(c => c.tagName === e.tagName); if (sibs.length > 1) p += ':nth-of-type(' + (sibs.indexOf(e) + 1) + ')'; }
+      parts.unshift(p); e = par;
+    }
+    return parts.join(' > ');
+  };
+  const desc = (e) => ({
+    tag: e.tagName.toLowerCase(),
+    type: e.getAttribute('type') || '',
+    placeholder: e.getAttribute('placeholder') || '',
+    label: e.getAttribute('aria-label') || (e.labels && e.labels[0] ? e.labels[0].textContent.trim() : ''),
+    text: (e.textContent || '').trim().slice(0, 50),
+    value: (e.value !== undefined && e.value !== null ? String(e.value).slice(0, 40) : ''),
+    css: cssPath(e),
+  });
+  const f = (filter || '').toLowerCase();
+  let els = Array.from(document.querySelectorAll(SEL)).filter(visible).map(desc);
+  if (f) els = els.filter(d => (d.text + ' ' + d.placeholder + ' ' + d.label + ' ' + d.type).toLowerCase().includes(f));
+  return els.slice(0, 60);
+}
+"""
+
+
+def _format_dom_map(items: "list[dict]") -> str:
+    """Render the DOM map as compact text lines the LLM can act on (each carries a css ref)."""
+    out = []
+    for d in items or []:
+        head = d.get("tag", "?")
+        if d.get("type"):
+            head += f" type={d['type']}"
+        bits = [f'{k}="{d[k]}"' for k in ("placeholder", "label", "text", "value") if d.get(k)]
+        out.append(f"  - {head} {' '.join(bits)} → ref=\"css={d.get('css', '')}\"")
+    return "\n".join(out)
+
+
 def _frame_payload(payload) -> str:
     if isinstance(payload, str):
         return payload
@@ -211,8 +261,28 @@ class Session:
         await self.page.set_viewport_size({"width": width, "height": height})
 
     # ── observation ────────────────────────────────────────────────────────
-    async def snapshot(self, *, depth: int | None = None) -> str:
-        return await aria_ai_snapshot(self.page, depth=depth)
+    async def snapshot(self, *, depth: int | None = None, enrich: bool = False) -> str:
+        snap = await aria_ai_snapshot(self.page, depth=depth)
+        if enrich:
+            # Append a one-shot DOM map of visible interactive elements (each with a css ref) so the
+            # model isn't stranded when the ARIA tree collapses to bare 'generic' nodes.
+            try:
+                items = await self.page.evaluate(_DOM_MAP_JS, "")
+            except Exception:
+                items = []
+            if items:
+                snap += ("\n\nVISIBLE INTERACTIVE ELEMENTS (DOM — use the css ref when the ARIA tree "
+                         "above is all 'generic'):\n" + _format_dom_map(items))
+        return snap
+
+    async def find(self, query: str) -> "list[dict]":
+        """Locate VISIBLE interactive elements whose text/placeholder/label/type contains `query`.
+        Returns descriptors each carrying a css selector usable in the ref slot — the escape hatch
+        when the ARIA snapshot is all 'generic' (no usable [ref=eN])."""
+        try:
+            return await self.page.evaluate(_DOM_MAP_JS, str(query or ""))
+        except Exception:
+            return []
 
     async def snapshot_frame(self, frame_ref: str, *, depth: int | None = None) -> str:
         """Return the ARIA snapshot for a child frame, with directly-actionable refs.
@@ -802,10 +872,32 @@ class Session:
         selector: str | None = None,
         url: str | None = None,
         network_idle: bool = False,
+        value_ref: str | None = None,
+        value: str | None = None,
         time: float | None = None,
         timeout_ms: float | None = None,
     ) -> None:
         _to = timeout_ms
+        if value_ref is not None:
+            # Wait until the element at value_ref HOLDS `value` (substring, case-insensitive). Confirms
+            # a field/dropdown actually committed — the timing partner of the type/select read-backs.
+            want = (value or "").lower()
+            per = int(_to or 8000)
+            loc = ref_locator(self.page, value_ref)
+            waited, cur = 0, ""
+            while waited < per:
+                try:
+                    cur = await loc.input_value(timeout=1000)
+                except Exception:
+                    try:
+                        cur = await loc.evaluate("el => (el.value || el.textContent || el.getAttribute('aria-label') || '').trim()")
+                    except Exception:
+                        cur = ""
+                if want in (cur or "").lower():
+                    return
+                await self.page.wait_for_timeout(250)
+                waited += 300
+            raise TimeoutError(f"value_ref {value_ref!r} did not contain {value!r} within {per}ms (last value: {cur!r})")
         if time is not None:
             await self.page.wait_for_timeout(time * 1000)
             return
