@@ -545,39 +545,72 @@ class Session:
             return None
 
     async def select_combobox(self, ref: str, value: str, *, submit_key: str = "Enter") -> dict:
-        """Pick `value` from a CUSTOM / searchable dropdown (country-code pickers, comboboxes) where
-        select_option times out. Ladder: open the trigger → type-to-filter (per-key events) →
-        ArrowDown + Enter to commit the highlighted option → VERIFY → fall back to clicking the option
-        by visible text. Keyboard-commit is immune to the stale-ref/re-render churn that breaks
-        click-the-option. Returns {committed, actual}."""
+        """Pick `value` from a CUSTOM / searchable dropdown (country & country-code pickers, React
+        listboxes) where select_option times out. Tries a LADDER and VERIFIES after every rung, so it
+        commits on the widgets that broke the old one-shot version (React/portal overlays whose options
+        aren't role=option, or where ArrowDown+Enter selected the wrong row):
+          0. if the ref is really a native <select>, delegate to select_option;
+          1. open the trigger → type-to-filter;
+          2. CLICK the matching visible option (role=option, then menuitem, then li / [class*=option]
+             filtered by text) — verifying after each;
+          3. keyboard ArrowDown + commit-key as the final fallback.
+        Returns {committed, actual, via}. committed=false ⇒ the selection did NOT take."""
         value = str(value)
+
+        async def committed_now() -> "tuple[bool, str | None]":
+            act = await self._combobox_value(ref)
+            return (value.lower() in (act or "").lower()), act
+
+        # 0) Native <select> hiding behind the combobox label → the reliable path.
+        try:
+            tag = await self._ref(ref).evaluate("el => el.tagName")
+            if tag == "SELECT":
+                res = await self.select_option(ref, [value])
+                return {"committed": True, "actual": res.get("label") or res.get("value"), "via": "native-select"}
+        except Exception:
+            pass
+
+        # 1) Open + type-to-filter (per-key events drive the site's own filter).
         try:
             await self._act_with_retry(ref, lambda loc: loc.click(timeout=_ACT_TIMEOUT_MS), "open combobox")
         except Exception:
             pass
-        await self.page.wait_for_timeout(150)
+        await self.page.wait_for_timeout(200)
         try:
-            await self.page.keyboard.type(value, delay=20)  # per-key events drive the site's filter
+            await self.page.keyboard.type(value, delay=25)
         except Exception:
             pass
-        await self.page.wait_for_timeout(300)
+        await self.page.wait_for_timeout(350)
+
+        # 2) Click the matching visible option. Several locators, broad→broad, verify after each.
+        option_locators = [
+            lambda: self.page.get_by_role("option", name=value),
+            lambda: self.page.get_by_role("menuitem", name=value),
+            lambda: self.page.locator("[role=option]").filter(has_text=value),
+            lambda: self.page.locator("li").filter(has_text=value),
+            lambda: self.page.locator("[class*=option], [class*=Option], [class*=item], [class*=Item]").filter(has_text=value),
+        ]
+        for make in option_locators:
+            try:
+                opt = make().first
+                if await opt.is_visible(timeout=600):
+                    await opt.click(timeout=2000)
+                    await self.page.wait_for_timeout(200)
+                    ok, actual = await committed_now()
+                    if ok:
+                        return {"committed": True, "actual": actual, "via": "click-option"}
+            except Exception:
+                continue
+
+        # 3) Keyboard commit: highlight the first filtered row, then commit.
         try:
             await self.page.keyboard.press("ArrowDown")
             await self.page.keyboard.press(submit_key)
+            await self.page.wait_for_timeout(200)
         except Exception:
             pass
-        await self.page.wait_for_timeout(150)
-        actual = await self._combobox_value(ref)
-        committed = value.lower() in (actual or "").lower()
-        if not committed:  # fallback: click the visible option by text
-            try:
-                await self.page.get_by_role("option", name=value).first.click(timeout=2500)
-                await self.page.wait_for_timeout(150)
-                actual = await self._combobox_value(ref)
-                committed = value.lower() in (actual or "").lower()
-            except Exception:
-                pass
-        return {"committed": committed, "actual": actual}
+        ok, actual = await committed_now()
+        return {"committed": ok, "actual": actual, "via": "keyboard" if ok else "none"}
 
     async def set_input(self, ref: str, value: str) -> "str | None":
         """Set a value on a FRAMEWORK-CONTROLLED input (React/Vue) via the native value setter +
@@ -597,34 +630,74 @@ class Session:
             raise ValueError(f"set_input failed on ref {ref!r}: {str(e)[:140]}") from e
 
     async def type_otp(self, ref: str, code: str) -> dict:
-        """Enter an OTP `code` robustly. If the ref's field is one of a GROUP of single-char
-        auto-advance boxes, distribute the digits across them (React-tracked setter + input events);
-        otherwise set the whole code into the single field. Returns {boxes, value}."""
+        """Enter an OTP `code` robustly across widget shapes. Multi-box widgets (one single-char
+        auto-advance <input> per digit) → distribute the digits across ALL the boxes; single-field
+        widgets (incl. shadcn-style one-hidden-input-rendered-as-slots) → set the whole code. Finds
+        the box GROUP by climbing ancestors from `ref` (the old version only looked at the immediate
+        parent, so it saw box 1 alone and stuffed the whole code into a maxlength=1 field → only box 1
+        filled). Fires keydown/beforeinput/input/change/keyup so React/auto-advance handlers react.
+        Returns {boxes, value} — read the value back."""
         code = str(code)
         js = (
             "(el, code) => {"
-            " const setVal = (input, v) => { const proto = input.tagName === 'TEXTAREA' ?"
-            " HTMLTextAreaElement.prototype : HTMLInputElement.prototype;"
-            " const s = Object.getOwnPropertyDescriptor(proto, 'value').set; input.focus(); s.call(input, v);"
-            " input.dispatchEvent(new Event('input', {bubbles:true}));"
-            " input.dispatchEvent(new Event('change', {bubbles:true})); };"
-            " const scope = el.closest('form') || el.parentElement || document;"
-            " let boxes = Array.from(scope.querySelectorAll('input')).filter(i => i.maxLength === 1 &&"
-            " ['text','tel','number','password',''].includes(i.type));"
-            " if (boxes.length >= code.length) { boxes = boxes.slice(0, code.length);"
-            " boxes.forEach((b, i) => setVal(b, code[i]));"
-            " return {boxes: boxes.length, value: boxes.map(b => b.value).join('')}; }"
-            " setVal(el, code); return {boxes: 1, value: el.value}; }"
+            " const setVal = (input, v) => {"
+            "   const proto = input.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;"
+            "   const s = Object.getOwnPropertyDescriptor(proto, 'value').set; input.focus();"
+            "   try { input.dispatchEvent(new KeyboardEvent('keydown', {bubbles:true, key:v})); } catch(e){}"
+            "   try { input.dispatchEvent(new InputEvent('beforeinput', {bubbles:true, data:v, inputType:'insertText'})); } catch(e){}"
+            "   s.call(input, v);"
+            "   input.dispatchEvent(new InputEvent('input', {bubbles:true, data:v, inputType:'insertText'}));"
+            "   input.dispatchEvent(new Event('change', {bubbles:true}));"
+            "   try { input.dispatchEvent(new KeyboardEvent('keyup', {bubbles:true, key:v})); } catch(e){}"
+            " };"
+            " const vis = (i) => i && !i.disabled && !i.readOnly && i.type !== 'hidden'"
+            "   && (i.offsetParent !== null || i.getClientRects().length > 0);"
+            " const okType = (i) => ['text','tel','number','password',''].includes((i.getAttribute('type')||'').toLowerCase())"
+            "   || ['text','tel','number','password',''].includes(i.type);"
+            " const isBox = (i) => vis(i) && okType(i) && i.maxLength === 1;"
+            " let boxes = [], node = el;"            # climb to the tightest ancestor holding the whole group
+            " for (let up = 0; up < 6 && node; up++) {"
+            "   const found = Array.from(node.querySelectorAll('input')).filter(isBox);"
+            "   if (found.length > boxes.length) boxes = found;"
+            "   if (boxes.length >= code.length) break;"
+            "   node = node.parentElement;"
+            " }"
+            " if (boxes.length < code.length) {"           # last resort: any single-char box group on the page
+            "   const all = Array.from(document.querySelectorAll('input')).filter(isBox);"
+            "   if (all.length >= code.length && all.length > boxes.length) boxes = all;"
+            " }"
+            " if (boxes.length >= code.length) {"
+            "   boxes = boxes.slice(0, code.length);"
+            "   boxes.forEach((b, i) => setVal(b, code[i]));"
+            "   return {boxes: boxes.length, value: boxes.map(b => b.value).join('')};"
+            " }"
+            " setVal(el, code); return {boxes: 1, value: el.value};"
+            "}"
         )
         try:
-            return await self._ref(ref).evaluate(js, code)
+            res = await self._ref(ref).evaluate(js, code)
+            # If the DOM path didn't land the full code, fall through to the keyboard path below.
+            if res and str(res.get("value", "")).strip() == code:
+                return res
+            dom_res = res
         except Exception:
-            try:
-                await self._ref(ref).click(timeout=_ACT_TIMEOUT_MS)
-            except Exception:
-                pass
-            await self.page.keyboard.type(code)
-            return {"boxes": "?", "value": "(typed via keyboard fallback — verify separately)"}
+            dom_res = None
+        try:
+            await self._ref(ref).click(timeout=_ACT_TIMEOUT_MS)
+        except Exception:
+            pass
+        await self.page.keyboard.type(code, delay=30)  # per-key events drive auto-advance widgets
+        # Best-effort read-back of what the boxes/field hold now.
+        try:
+            val = await self._ref(ref).evaluate(
+                "el => { const s = el.closest('form') || document;"
+                " const bs = Array.from(s.querySelectorAll('input')).filter(i => i.maxLength === 1"
+                "   && (i.offsetParent !== null));"
+                " return bs.length >= 2 ? bs.map(b => b.value).join('') : (el.value || ''); }"
+            )
+        except Exception:
+            val = (dom_res or {}).get("value", "") if dom_res else ""
+        return {"boxes": "?", "value": val or "(typed via keyboard fallback — verify separately)"}
 
     async def press_key(self, key: str) -> None:
         await self.page.keyboard.press(key)
