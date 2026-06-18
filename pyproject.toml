@@ -1,6 +1,6 @@
 [project]
 name = "eyebrowse"
-version = "0.3.8"
+version = "0.3.9"
 description = "EyeBrowse — a stealthy, LLM-drivable browser-control engine (CloakBrowser, stealth Chromium), consumed as a library and over MCP."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
@@ -53,6 +53,8 @@ Issues = "https://github.com/Evil-Bane/eyebrowse/issues"
 
 [project.scripts]
 eyebrowse-mcp = "eyebrowse.mcp.server:main"
+# Alias so `uvx eyebrowse` runs the MCP server (matches the official MCP registry identifier).
+eyebrowse = "eyebrowse.mcp.server:main"
 
 [build-system]
 requires = ["hatchling"]

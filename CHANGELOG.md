@@ -4,6 +4,12 @@ All notable changes to EyeBrowse are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.9] — 2026-06-19
+
+### Added
+- `eyebrowse` console-script alias (alongside `eyebrowse-mcp`) so `uvx eyebrowse` launches the
+  MCP server — matches the identifier used in the official MCP registry listing.
+
 ## [0.3.8] — 2026-06-19
 
 ### Added
@@ -82,6 +88,7 @@ Initial public release — EyeBrowse on the **CloakBrowser** stealth-Chromium en
 - Network inspection / block / mock / offline, cookies + local/session storage CRUD,
   `storage_state`, full **HAR** export, and Crawl4AI markdown extraction (optional extra).
 
+[0.3.9]: https://github.com/Evil-Bane/eyebrowse/compare/v0.3.8...v0.3.9
 [0.3.8]: https://github.com/Evil-Bane/eyebrowse/compare/v0.3.7...v0.3.8
 [0.3.7]: https://github.com/Evil-Bane/eyebrowse/compare/v0.3.6...v0.3.7
 [0.3.6]: https://github.com/Evil-Bane/eyebrowse/compare/v0.3.5...v0.3.6
