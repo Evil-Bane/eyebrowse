@@ -1,29 +1,22 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.Evil-Bane/eyebrowse",
-  "description": "An MCP server that provides [describe what your server does]",
+  "description": "Stealthy, LLM-drivable browser engine — a Python library + 85-tool MCP server on stealth Chromium.",
   "repository": {
     "url": "https://github.com/Evil-Bane/eyebrowse",
     "source": "github"
   },
-  "version": "1.0.0",
+  "version": "0.3.10",
   "packages": [
     {
       "registryType": "pypi",
+      "registryBaseUrl": "https://pypi.org",
       "identifier": "eyebrowse",
-      "version": "1.0.0",
+      "version": "0.3.10",
+      "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"
-      },
-      "environmentVariables": [
-        {
-          "description": "Your API key for the service",
-          "isRequired": true,
-          "format": "string",
-          "isSecret": true,
-          "name": "YOUR_API_KEY"
-        }
-      ]
+      }
     }
   ]
 }
