@@ -1,3 +1,4 @@
+<!-- mcp-name: io.github.evil-bane/eyebrowse -->
 <div align="center">
 
 # 👁️ EyeBrowse

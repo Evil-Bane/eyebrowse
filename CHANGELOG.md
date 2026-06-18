@@ -4,6 +4,13 @@ All notable changes to EyeBrowse are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.8] — 2026-06-19
+
+### Added
+- Listed on the official **MCP registry** (`registry.modelcontextprotocol.io`) as
+  `io.github.evil-bane/eyebrowse`. Added an `mcp-name` marker to the package README so the
+  registry can verify PyPI package ownership. Metadata only — no code changes.
+
 ## [0.3.7] — 2026-06-18
 
 ### Added
@@ -75,6 +82,7 @@ Initial public release — EyeBrowse on the **CloakBrowser** stealth-Chromium en
 - Network inspection / block / mock / offline, cookies + local/session storage CRUD,
   `storage_state`, full **HAR** export, and Crawl4AI markdown extraction (optional extra).
 
+[0.3.8]: https://github.com/Evil-Bane/eyebrowse/compare/v0.3.7...v0.3.8
 [0.3.7]: https://github.com/Evil-Bane/eyebrowse/compare/v0.3.6...v0.3.7
 [0.3.6]: https://github.com/Evil-Bane/eyebrowse/compare/v0.3.5...v0.3.6
 [0.3.5]: https://github.com/Evil-Bane/eyebrowse/compare/v0.3.4...v0.3.5
