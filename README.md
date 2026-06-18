@@ -20,9 +20,9 @@ deep network inspection, MHTML, PDF, and native video.
 [![Code style: Ruff](https://img.shields.io/badge/lint-ruff-261230.svg?logo=ruff&logoColor=white)](https://github.com/astral-sh/ruff)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-22c55e.svg)](CONTRIBUTING.md)
 
-![EyeBrowse driving a real browser](https://raw.githubusercontent.com/Evil-Bane/eyebrowse/master/docs/demo.gif)
+![EyeBrowse — an AI agent driving a stealth browser past Cloudflare, over MCP](https://raw.githubusercontent.com/Evil-Bane/eyebrowse/master/docs/demo.gif)
 
-<sub>▶ Higher-quality MP4: <a href="https://github.com/Evil-Bane/eyebrowse/blob/master/docs/demo.mp4">docs/demo.mp4</a> — a real EyeBrowse session captured with native video (<code>examples/make_demo.py</code>)</sub>
+<sub>▶ Full-quality MP4: <a href="https://github.com/Evil-Bane/eyebrowse/blob/master/docs/demo.mp4">docs/demo.mp4</a> — an AI agent drives EyeBrowse over MCP: clears a Cloudflare check, then reads real docs (asyncio · httpx · MDN).</sub>
 
 </div>
 
