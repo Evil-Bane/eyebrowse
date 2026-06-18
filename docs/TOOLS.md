@@ -1,6 +1,6 @@
 # EyeBrowse — MCP Tool Reference
 
-**81 tools** across 18 groups. Every tool accepts an optional `session_id` (a default session is created automatically on first use). Engine: **CloakBrowser** (stealth Chromium) — so the full CDP surface (trusted clicks, network inspection, MHTML, PDF, native video) is available.
+**85 tools** across 18 groups. Every tool accepts an optional `session_id` (a default session is created automatically on first use). Engine: **CloakBrowser** (stealth Chromium) — so the full CDP surface (trusted clicks, network inspection, MHTML, PDF, native video) is available.
 
 ## Sessions
 

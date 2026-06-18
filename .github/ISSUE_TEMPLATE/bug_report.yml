@@ -1,0 +1,49 @@
+name: Bug report
+description: Something isn't working as documented
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for the report — please fill in what you can so it's reproducible.
+  - type: dropdown
+    id: surface
+    attributes:
+      label: How are you using EyeBrowse?
+      options:
+        - Python library (from eyebrowse import EyeBrowse)
+        - MCP server (eyebrowse-mcp)
+        - Both
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: EyeBrowse version
+      placeholder: 0.3.6  — python -c "import eyebrowse; print(eyebrowse.__version__)"
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: OS / Python
+      placeholder: Windows 11 · Python 3.12
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you expected vs. what actually happened.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: The smallest snippet or tool sequence that triggers it.
+      render: python
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / traceback
+      render: shell

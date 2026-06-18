@@ -10,11 +10,15 @@ PerimeterX. Built on **CloakBrowser** — a stealth **Chromium** (Chrome/146) th
 drop-in — so EyeBrowse gets the full **Chrome DevTools Protocol**: trusted cursorless clicks,
 deep network inspection, MHTML, PDF, and native video.
 
+[![CI](https://github.com/Evil-Bane/eyebrowse/actions/workflows/ci.yml/badge.svg)](https://github.com/Evil-Bane/eyebrowse/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/eyebrowse?color=3775A9&logo=pypi&logoColor=white)](https://pypi.org/project/eyebrowse/)
 [![Python 3.12](https://img.shields.io/badge/python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-22c55e.svg)](LICENSE)
-[![MCP tools](https://img.shields.io/badge/MCP-81_tools-7c3aed.svg)](docs/TOOLS.md)
-[![Engine: CloakBrowser](https://img.shields.io/badge/engine-CloakBrowser%20(stealth%20Chromium)-4285F4.svg)](https://github.com/CloakHQ/cloakbrowser)
+<br/>
+[![MCP tools](https://img.shields.io/badge/MCP-85_tools-7c3aed.svg)](docs/TOOLS.md)
+[![Engine: CloakBrowser](https://img.shields.io/badge/engine-CloakBrowser%20(stealth%20Chromium)-4285F4.svg)](https://pypi.org/project/cloakbrowser/)
+[![Code style: Ruff](https://img.shields.io/badge/lint-ruff-261230.svg?logo=ruff&logoColor=white)](https://github.com/astral-sh/ruff)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-22c55e.svg)](CONTRIBUTING.md)
 
 ![EyeBrowse driving a real browser](https://raw.githubusercontent.com/Evil-Bane/eyebrowse/master/docs/demo.gif)
 
@@ -29,7 +33,7 @@ deep network inspection, MHTML, PDF, and native video.
 - 🥷 **Stealth by default** — engine-level fingerprint spoofing (`geoip` + `humanize` on out of the box, novel fingerprint per launch); `navigator.webdriver` masked; viewport auto-sized to the spoofed screen. No `puppeteer-extra` band-aids — the anti-detection is *compiled into the browser*.
 - 🤖 **Built for LLMs** — pages are read as an **ARIA tree with `[ref=…]` handles**; the model acts by ref (`click`/`type`/`hover`), not by brittle CSS or raw pixels. Cross-origin iframes, shadow DOM, popups — handled.
 - ⚡ **Chrome DevTools Protocol** — **trusted, cursorless clicks** by node ref (`Input.dispatchMouseEvent`), raw `Network`/`Performance`/`Emulation` access, **MHTML** snapshots, **PDF** export, and **native video** — all reachable as tools.
-- 🧰 **Library *and* MCP from one codebase** — a clean Python API (`EyeBrowse` + `Session`), mirrored 1:1 by a thin **MCP server** (**81 `browser_*` tools**) for Claude Code and any MCP client.
+- 🧰 **Library *and* MCP from one codebase** — a clean Python API (`EyeBrowse` + `Session`), mirrored 1:1 by a thin **MCP server** (**85 `browser_*` tools**) for Claude Code and any MCP client.
 - 🪟 **Never boxed in** — the curated high-level API doesn't hide Playwright: reach `session.page` / `.context` / `.browser` for anything it doesn't wrap.
 - 🔋 **Batteries included** — multi-session, proxy + identity rotation, API-mode captcha solvers, native video, full **HAR** capture, and clean-markdown extraction.
 
@@ -38,7 +42,7 @@ deep network inspection, MHTML, PDF, and native video.
 
 ## Contents
 
-[Quickstart](#quickstart) · [Install](#install) · [Features](#features) · [Library](#use-as-a-library) · [MCP](#use-over-mcp) · [Proxy & identity](#proxy--identity-optional) · [Extraction](#extraction) · [Recording](#recording) · [How it works](#how-it-works) · [Caveats](#caveats) · [Tools](docs/TOOLS.md) · [License](#license)
+[Quickstart](#quickstart) · [Install](#install) · [Features](#features) · [Compare](#how-eyebrowse-compares) · [Library](#use-as-a-library) · [MCP](#use-over-mcp) · [Proxy & identity](#proxy--identity-optional) · [Extraction](#extraction) · [Recording](#recording) · [How it works](#how-it-works) · [Caveats](#caveats) · [Tools](docs/TOOLS.md) · [License](#license)
 
 ## Quickstart
 
@@ -102,7 +106,22 @@ Python 3.12 (pinned `<3.13`). Engine: `cloakbrowser>=0.3` (stealth Chromium, Chr
 | 🎥 **Capture** | screenshots, Playwright tracing, and **native video** (`.webm`). |
 | ✅ **Verify & debug** | assertions, element highlighting, locator generation, geolocation/header emulation. |
 
-Full per-tool reference: **[docs/TOOLS.md](docs/TOOLS.md)** (81 tools across 18 groups).
+Full per-tool reference: **[docs/TOOLS.md](docs/TOOLS.md)** (85 tools across 18 groups).
+
+## How EyeBrowse compares
+
+|                                                   |     EyeBrowse      | Playwright&nbsp;MCP |    browser-use     | playwright-stealth |
+| :------------------------------------------------ | :----------------: | :-----------------: | :----------------: | :----------------: |
+| Anti-detection **compiled into the browser**      |         ✅         |         ❌          |         ❌         |   ⚠️ JS patches    |
+| LLM-native ARIA **`[ref]`** interaction model     |         ✅         |         ✅          |         ✅         |         ❌         |
+| Ships an **MCP server**                            |   ✅ (85 tools)    |         ✅          |     ⚠️ partial     |         ❌         |
+| One codebase: Python **library *and* MCP**        |         ✅         |     MCP-only        |     lib-only       |     lib-only       |
+| Full **CDP** (trusted clicks · network · MHTML · PDF · video) | ✅     |     ⚠️ partial      |         ❌         |     ⚠️ partial     |
+| **Captcha** (API-mode) + TOTP                     |         ✅         |         ❌          |         ❌         |         ❌         |
+| **Proxy + identity rotation** built in            |         ✅         |         ❌          |     ⚠️ partial     |         ❌         |
+| Cross-origin iframes · shadow DOM · popups        |         ✅         |         ✅          |     ⚠️ partial     |        n/a         |
+
+<sub>Fair-use note: each project targets a different niche — this compares them on the axes EyeBrowse optimizes for (stealth + LLM-drivable + one library/MCP codebase), not as an overall ranking.</sub>
 
 ## Use as a library
 
@@ -241,7 +260,7 @@ eyebrowse/
   extract.py        Crawl4AI raw: feed → markdown (lazy, optional dep)
   engine/           engine.py (CloakBrowser launch) + session.py (verbs + registry)
   captcha/          solver ABC + 4 providers + DOM detect/inject
-  mcp/              FastMCP server + state + tools/ (18 groups, 81 tools)
+  mcp/              FastMCP server + state + tools/ (18 groups · 85 tools)
 examples/direct_usage.py   library proof (no MCP)
 examples/make_demo.py      the native-video demo above
 docs/TOOLS.md              full tool reference
@@ -257,3 +276,12 @@ own or are explicitly authorized to automate, and within their terms and applica
 ## License
 
 [MIT](LICENSE) © Evil-Bane
+
+<div align="center">
+<br/>
+
+**Found EyeBrowse useful?** ⭐ Star the repo — it genuinely helps.
+
+<sub>Built with Python · Playwright · CloakBrowser · FastMCP · the Model Context Protocol</sub>
+
+</div>

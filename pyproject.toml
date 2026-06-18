@@ -60,3 +60,8 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["eyebrowse"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["reference", "examples/__pycache__"]
