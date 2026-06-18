@@ -14,6 +14,8 @@ def register(mcp) -> None:
         humanize: "float | bool | None" = None,
         record_har: bool = False,
         record_video: bool = False,
+        record_video_width: int | None = None,
+        record_video_height: int | None = None,
         har_url_filter: str | None = None,
         storage_state: str | None = None,
         extensions: "list[str] | None" = None,
@@ -37,6 +39,8 @@ def register(mcp) -> None:
         record_har: capture a full network HAR (export with browser_har_export).
         record_video: record the session to a native .webm (Chromium only); fetch the path with
             browser_video_path. The file is finalized on browser_close_session.
+        record_video_width / record_video_height: pin the recording resolution (e.g. 1920 x 1080
+            for HD); when omitted Playwright defaults to 800x450.
         har_url_filter: glob to scope what the HAR records (e.g. '**/api/**' or
             '**/students/**') so it excludes login/captcha/static noise; default = all.
         storage_state: path to a saved cookies/localStorage JSON to reload.
@@ -63,6 +67,11 @@ def register(mcp) -> None:
             label=label,
             record_har=record_har,
             record_video=record_video,
+            record_video_size=(
+                (record_video_width, record_video_height)
+                if record_video_width and record_video_height
+                else None
+            ),
             har_url_filter=har_url_filter,
             storage_state=storage_state,
             extensions=extensions,

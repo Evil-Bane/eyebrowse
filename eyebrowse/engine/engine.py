@@ -111,6 +111,7 @@ class BrowserEngine:
         record_har_path: str | None = None,
         record_har_url_filter: str | None = None,
         record_video_dir: str | None = None,
+        record_video_size: "tuple[int, int] | None" = None,
         extensions: "list[str] | None" = None,
         context_options: dict | None = None,
         extra: dict | None = None,
@@ -148,6 +149,8 @@ class BrowserEngine:
                     kw["viewport"] = viewport
                 if record_video_dir:
                     kw["record_video_dir"] = record_video_dir
+                    if record_video_size:
+                        kw["record_video_size"] = {"width": record_video_size[0], "height": record_video_size[1]}
                 if record_har_path:  # HAR works on persistent contexts (verified)
                     kw.update(
                         record_har_path=record_har_path,
@@ -173,6 +176,8 @@ class BrowserEngine:
                     ctx_opts.setdefault("record_har_url_filter", record_har_url_filter or "**/*")
                 if record_video_dir:
                     ctx_opts["record_video_dir"] = record_video_dir
+                    if record_video_size:
+                        ctx_opts["record_video_size"] = {"width": record_video_size[0], "height": record_video_size[1]}
                 context = await browser.new_context(**ctx_opts)
                 pages = [await context.new_page()]
                 cam = _Cleanup(browser)
